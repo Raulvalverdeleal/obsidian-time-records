@@ -1,7 +1,3 @@
----
-createdAt: 2025-06-01T18:18:59+02:00
-updatedAt: 2025-06-01T18:46:01+02:00
----
 # Time Records Plugin for Obsidian
 The Time Records Plugin is an Obsidian plugin that allows you to easily manage and insert time records into your notes using a simple and flexible syntax. Whether you want to assign dedicated time to projects, track events, or log time periods, this plugin provides an intuitive interface and powerful features.
 
