@@ -1,134 +1,135 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, MarkdownView, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { getDateString, handleTimeRecordsMatch } from 'helpers';
 
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
-	mySetting: string;
+interface ObsidianTimeRecordsSettings {
+    prefix: string
+    dev: boolean
 }
 
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+const DEFAULT_SETTINGS: ObsidianTimeRecordsSettings = {
+    prefix: 'T',
+    dev: false,
 }
 
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class ObsidianTimeRecords extends Plugin {
+    settings: ObsidianTimeRecordsSettings
 
-	async onload() {
-		await this.loadSettings();
+    async onload() {
 
-		// This creates an icon in the left ribbon.
-		const ribbonIconEl = this.addRibbonIcon('dice', 'Sample Plugin', (evt: MouseEvent) => {
-			// Called when the user clicks the icon.
-			new Notice('This is a notice!');
-		});
-		// Perform additional things with the ribbon
-		ribbonIconEl.addClass('my-plugin-ribbon-class');
+        await this.loadSettings();
+        const prefix = this.settings.prefix || "T"
 
-		// This adds a status bar item to the bottom of the app. Does not work on mobile apps.
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('Status Bar Text');
+        this.registerMarkdownPostProcessor((element, context) => {
+            const regex = new RegExp(`${prefix}\\(\\s*(.*?)\\s*\\)`,'g')
 
-		// This adds a simple command that can be triggered anywhere
-		this.addCommand({
-			id: 'open-sample-modal-simple',
-			name: 'Open sample modal (simple)',
-			callback: () => {
-				new SampleModal(this.app).open();
-			}
-		});
-		// This adds an editor command that can perform some operation on the current editor instance
-		this.addCommand({
-			id: 'sample-editor-command',
-			name: 'Sample editor command',
+            const textNodes = Array.from(element.querySelectorAll('*:not(pre):not(code)')).flatMap(el => Array.from(el.childNodes))
+
+            for (let i = 0; i < textNodes.length; i++) {
+
+                const node = textNodes[i]
+                if (!node || node.nodeType !== Node.TEXT_NODE || !node.textContent) continue
+
+                const matches = node.textContent.matchAll(regex)
+
+                let replacedText = node.textContent
+                for (const match of matches) {
+
+                    const [fullMatch, timeRecord] = match
+                    console.log(`TR Match: ${fullMatch} -> ${timeRecord}`)
+                    const formattedDuration = handleTimeRecordsMatch(timeRecord)
+                    replacedText = replacedText.replace(fullMatch, formattedDuration)
+                }
+
+                if (replacedText !== node.textContent) {
+                    node.textContent = replacedText
+                }
+            }
+        })
+
+        this.addCommand({
+			id: 'tm-insert-time-record',
+			name: 'Insert time record',
 			editorCallback: (editor: Editor, view: MarkdownView) => {
-				console.log(editor.getSelection());
-				editor.replaceSelection('Sample Editor Command');
+
+                const cursorPosition = editor.getCursor()
+                const textToInsert = `${prefix}()`
+        
+                editor.replaceRange(textToInsert, cursorPosition)
+        
+                const newCursorPosition = {
+                    line: cursorPosition.line,
+                    ch: cursorPosition.ch + textToInsert.indexOf('()') + 1,
+                }
+
+                editor.setCursor(newCursorPosition);
 			}
-		});
-		// This adds a complex command that can check whether the current state of the app allows execution of the command
-		this.addCommand({
-			id: 'open-sample-modal-complex',
-			name: 'Open sample modal (complex)',
-			checkCallback: (checking: boolean) => {
-				// Conditions to check
-				const markdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (markdownView) {
-					// If checking is true, we're simply "checking" if the command can be run.
-					// If checking is false, then we want to actually perform the operation.
-					if (!checking) {
-						new SampleModal(this.app).open();
-					}
+		})
 
-					// This command will only show up in Command Palette when the check function returns true
-					return true;
-				}
+        this.addCommand({
+			id: 'tm-insert-date-time',
+			name: 'Insert the current date and time',
+			editorCallback: (editor: Editor, view: MarkdownView) => {
+
+                const cursorPosition = editor.getCursor()
+                const textToInsert = getDateString(new Date())
+        
+                editor.replaceRange(textToInsert, cursorPosition)
+        
+                const newCursorPosition = {
+                    line: cursorPosition.line,
+                    ch: cursorPosition.ch + textToInsert.length,
+                }
+
+                editor.setCursor(newCursorPosition);
 			}
-		});
+		})
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+        this.addSettingTab(new SampleSettingTab(this.app, this))
+    }
 
-		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
-		// Using this function will automatically remove the event listener when this plugin is disabled.
-		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
-			console.log('click', evt);
-		});
+    onunload() {}
 
-		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(window.setInterval(() => console.log('setInterval'), 5 * 60 * 1000));
-	}
+    async loadSettings() {
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    }
 
-	onunload() {
-
-	}
-
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-	}
-
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
-}
-
-class SampleModal extends Modal {
-	constructor(app: App) {
-		super(app);
-	}
-
-	onOpen() {
-		const {contentEl} = this;
-		contentEl.setText('Woah!');
-	}
-
-	onClose() {
-		const {contentEl} = this;
-		contentEl.empty();
-	}
+    async saveSettings() {
+        await this.saveData(this.settings)
+    }
 }
 
 class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+    plugin: ObsidianTimeRecords
 
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
+    constructor(app: App, plugin: ObsidianTimeRecords) {
+        super(app, plugin)
+        this.plugin = plugin
+    }
 
-	display(): void {
-		const {containerEl} = this;
+    display(): void {
+        const { containerEl } = this
 
-		containerEl.empty();
+        containerEl.empty()
 
-		new Setting(containerEl)
-			.setName('Setting #1')
-			.setDesc('It\'s a secret')
-			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
-				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
-					await this.plugin.saveSettings();
-				}));
-	}
+        new Setting(containerEl)
+            .setName('Time record prefix')
+            .setDesc('The string before the timestamps')
+            .addText(text => text
+                .setPlaceholder('"T" as default')
+                .setValue(this.plugin.settings.prefix)
+                .onChange(async (value) => {
+                    this.plugin.settings.prefix = value
+                    await this.plugin.saveSettings()
+                }))
+
+        new Setting(containerEl)
+            .setName('Dev logs')
+            .setDesc('Show useful debugging logs in the console')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.dev)
+                .onChange(async (value) => {
+                    this.plugin.settings.dev = value
+                    await this.plugin.saveSettings()
+                }))
+    }
 }
